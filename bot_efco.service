@@ -1,0 +1,15 @@
+[Unit]
+Description=Telegram bot 'EFCO'
+After=syslog.target
+After=network.target
+
+[Service]
+Type=simple
+User=hoob #юзера поменяй
+WorkingDirectory=/home/hoob/efco #и это
+ExecStart=/usr/bin/python3 /home/hoob/efco/bot.py #ну и тут
+RestartSec=10
+Restart=always
+ 
+[Install]
+WantedBy=multi-user.target
