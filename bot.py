@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import telebot
 from telebot import apihelper
 from telebot import types

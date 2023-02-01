@@ -1,56 +1,76 @@
-# -*- coding: utf-8 -*-
+from http import HTTPStatus
+from sys import stdout
+
 import requests
-from config import config
+import logging
+from config.config import (URL_TRADE, URL_LOGIN, URL_LOGOUT, URL_BASE,
+                           EFCO_PASSWORD, EFCO_LOGIN, RETRY_PERIOD)
 import re
 from bs4 import BeautifulSoup
 from fake_useragent import UserAgent
 from datetime import datetime, time
-from time import sleep
+import time
 import os
 
 script_dir = os.path.dirname(__file__)
 
-session = requests.Session()
 
-def parser():
+UA = UserAgent(verify_ssl=True).chrome
 
-    #url = "http://y91805lt.beget.tech/index.html"
-    url = "https://taman.trans.efko.ru/trade/2"
-    urlAuth = "https://taman.trans.efko.ru/login.php"
-    urlLogout = "https://taman.trans.efko.ru/logout.php"
-    urlBet = "https://taman.trans.efko.ru"
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[logging.StreamHandler(stream=stdout)],
+)
 
-    betTask = []
-    i=0
 
-    session.post(urlAuth, config.data, verify=True, headers={'User-Agent': UserAgent(verify_ssl=False).chrome})
+def login(session):
+    try:
+        response = session.post(
+            URL_LOGIN,
+            params={'xLogin': EFCO_LOGIN,
+                    'xPassword': EFCO_PASSWORD},
+            headers={'User-Agent': UA}
+        )
+    except requests.RequestException:
+        logging.error('Запрос не удался')
+        raise Exception('Запрос не удался')
+    response.raise_for_status()
 
-    html = session.get(url, verify=True, headers={'User-Agent': UserAgent(verify_ssl=False).chrome})
-    soup = BeautifulSoup(html.content, 'lxml')
 
-    while soup.find('table') == None:
-        html = session.get(url, verify=True, headers={'User-Agent': UserAgent(verify_ssl=False).chrome})
-        soup = BeautifulSoup(html.content, 'lxml')
-        i += 1
+def logout(session):
+    session.get(
+        URL_LOGOUT,
+        headers={'User-Agent': UA}
+    )
 
+
+def get_trade_page(session):
+    """
+    Get trade web page.
+    """
+    html = session.get(URL_TRADE, verify=True, headers={'User-Agent': UA})
+    return BeautifulSoup(html.content, 'lxml')
+
+
+def parse_table(soup):
+    bet_task = []
     for rows in soup.find_all('tr')[1:]:
         cols = rows.find_all('td')
+        # в атрибут текст передаем стоимость ставки в str
+        link: dict = rows.find('button', text=re.compile('9.9'), class_='newbet')
 
-        links = rows.find_all('button', text=re.compile("11"), class_='newbet')
-        linkBet = None
+        # if not links:
+        #     linkBet = 'http://ya.ru'
+        # else:
+        #     for link in links:
+        url_bet: str = URL_BASE + link['href']
 
-        if not links:
-            linkBet = 'http://ya.ru'
-        else:
-            for link in links:
-                linkBet = urlBet + link.get('href')
-        #print(linkBet)
-
-        betTask.append({
-            'num': cols[0].strong.text,
-            'cityOut': cols[6].strong.text + ' ' + cols[7].strong.text + ' | ' + cols[4].strong.text,
-            'cityIn': cols[8].strong.text + ' | ' + cols[3].strong.text,
-            'urlBet10': linkBet
+        bet_task.append({
+            'number': cols[0].strong.text,
+            'city_out': cols[6].strong.text + ' ' + cols[7].strong.text + ' | ' + cols[4].strong.text,
+            'city_in': cols[8].strong.text + ' | ' + cols[3].strong.text,
+            'url_bet': url_bet,
         })
 
     count = 0
@@ -80,9 +100,6 @@ def parser():
 
                     count += 1
 
-
-    session.get(urlLogout, verify=True, headers={'User-Agent': UserAgent(verify_ssl=False).chrome})
-
     f = open(os.path.join(script_dir, 'logs/log_bet.txt'), 'w', encoding='utf-8')
     for i in range(len(betTask)):
         for key, value in betTask[i].items():
@@ -90,18 +107,30 @@ def parser():
         f.write("\n")
     f.close()
 
-def act(x):
-    return x+10
 
-def wait_start(runTime, action):
-    startTime = time(*(map(int, runTime.split(':'))))
-    while startTime > datetime.today().time():
-        sleep(1)
-    return action
+# def act(x):
+#     return x+10
+#
+#
+# def wait_start(runTime, action):
+#     startTime = time(*(map(int, runTime.split(':'))))
+#     while startTime > datetime.today().time():
+#         time.sleep(1)
+#     return action
+
 
 def main():
-    wait_start('15:00:00', lambda: act(100))
-    parser()
+    session = requests.Session()
+
+    # wait_start('15:00:00', lambda: act(100))
+
+    # login(session)
+    soup = get_trade_page(session)
+    while not soup.find('table'):
+        soup = get_trade_page(session)
+    parse_table(soup)
+    # logout(session)
+
 
 if __name__ == '__main__':
     main()

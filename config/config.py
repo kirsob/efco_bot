@@ -1,14 +1,8 @@
-# -*- coding: utf-8 -*-
-
 from enum import Enum
 import os
-script_dir = os.path.dirname(__file__) #absolute dir the script is in
 
 
-TOKEN = '983071785:AAHV7ven6wugduQadPRFwebp0nXH48FFD_w'
 db_file = "config/database.vdb"
-
-data = {'xLogin': 'evgen28rus@mail.ru', 'xPassword': 'had2911'}
 
 rel_path = "bet_num.txt"
 abs = os.path.join(script_dir, rel_path)
