@@ -1,18 +1,27 @@
-from enum import Enum
 import os
 
+from fake_useragent import UserAgent
+from dotenv import load_dotenv
 
-db_file = "config/database.vdb"
+load_dotenv()
 
-rel_path = "bet_num.txt"
-abs = os.path.join(script_dir, rel_path)
+BASE_DIR = os.path.dirname(__file__)
 
-f = open(os.path.join(script_dir, 'bet_num.txt'), 'r', encoding='utf-8')
-sumBet = int(f.read())
-f.close()#кол-во необходимых заявок
+EFCO_LOGIN = os.getenv('EFCO_LOGIN')
+EFCO_PASSWORD = os.getenv('EFCO_PASSWORD')
 
-#price = '10'
+TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 
-class States(Enum):
-    S_START = "0"  # Начало нового диалога
-    S_CITY = "1"
+REDIS_HOST = os.getenv('REDIS_HOST')
+REDIS_PORT = os.getenv('REDIS_PORT')
+REDIS_DB = os.getenv('REDIS_DB')
+
+URL_BASE = 'https://taman.trans.efko.ru'
+URL_LOGIN = URL_BASE + '/login.php'
+URL_LOGOUT = URL_BASE + '/logout.php'
+URL_TRADE = "http://y91805lt.beget.tech/index.html"
+# URL_TRADE = URL_BASE + '/trade/2'
+
+USER_AGENT = UserAgent(verify_ssl=True).chrome
+
+RETRY_PERIOD = 3
