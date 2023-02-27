@@ -1,21 +1,18 @@
-from http import HTTPStatus
+import json
+import logging
+import re
+import time
+from datetime import datetime
+from datetime import time as dtime
 from sys import stdout
+from typing import Dict, List
 
 import requests
-import logging
-from config.config import (URL_TRADE, URL_LOGIN, URL_LOGOUT, URL_BASE,
-                           EFCO_PASSWORD, EFCO_LOGIN, RETRY_PERIOD)
-import re
 from bs4 import BeautifulSoup
-from fake_useragent import UserAgent
-from datetime import datetime, time
-import time
-import os
 
-script_dir = os.path.dirname(__file__)
-
-
-UA = UserAgent(verify_ssl=True).chrome
+from config.config import (EFCO_LOGIN, EFCO_PASSWORD, URL_BASE, URL_LOGIN,
+                           URL_LOGOUT, URL_TRADE, USER_AGENT)
+from db.redis_operations import db
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -24,13 +21,14 @@ logging.basicConfig(
 )
 
 
-def login(session):
+def login(session: requests.Session) -> None:
+    """Авторизация на сайте торгов."""
     try:
         response = session.post(
             URL_LOGIN,
             params={'xLogin': EFCO_LOGIN,
                     'xPassword': EFCO_PASSWORD},
-            headers={'User-Agent': UA}
+            headers={'User-Agent': USER_AGENT}
         )
     except requests.RequestException:
         logging.error('Запрос не удался')
@@ -38,98 +36,109 @@ def login(session):
     response.raise_for_status()
 
 
-def logout(session):
+def logout(session: requests.Session) -> None:
+    """Завершение сессии на сайте торгов."""
+    # TODO: обложить весь код логгером
     session.get(
         URL_LOGOUT,
-        headers={'User-Agent': UA}
+        headers={'User-Agent': USER_AGENT},
     )
 
 
-def get_trade_page(session):
+def get_trade_page(session: requests.Session) -> BeautifulSoup:
     """
-    Get trade web page.
+    Получение страницы торгов, возврат объекта bs4.
     """
-    html = session.get(URL_TRADE, verify=True, headers={'User-Agent': UA})
+    html = session.get(
+        URL_TRADE,
+        verify=True,
+        headers={'User-Agent': USER_AGENT},
+    )
     return BeautifulSoup(html.content, 'lxml')
 
 
-def parse_table(soup):
-    bet_task = []
+def parse_table(soup: BeautifulSoup) -> List[Dict[str, str]]:
+    """
+    Парсинг полученного объекта soup типа bs4.
+    Возвращает список словарей с необходимой информацией о заявках.
+    """
+    bet_tasks = []
     for rows in soup.find_all('tr')[1:]:
         cols = rows.find_all('td')
-        # в атрибут текст передаем стоимость ставки в str
-        link: dict = rows.find('button', text=re.compile('9.9'), class_='newbet')
+        # в атрибут text передаем стоимость ставки в str
+        link: dict = rows.find(
+            'button',
+            text=re.compile('9.9'),
+            class_='newbet')
 
-        # if not links:
-        #     linkBet = 'http://ya.ru'
-        # else:
-        #     for link in links:
-        url_bet: str = URL_BASE + link['href']
+        if not link:
+            continue
+        url_bet: str = URL_BASE + str(link.get('href'))
 
-        bet_task.append({
-            'number': cols[0].strong.text,
-            'city_out': cols[6].strong.text + ' ' + cols[7].strong.text + ' | ' + cols[4].strong.text,
-            'city_in': cols[8].strong.text + ' | ' + cols[3].strong.text,
+        bet_tasks.append({
+            'number_task': cols[0].strong.text,
+            'departure_city': cols[4].strong.text,
+            'departure_datetime': (cols[6].strong.text
+                                   + ' ' + cols[7].strong.text),
+            'arrival_city': cols[3].strong.text,
+            'arrival_datetime': cols[8].strong.text,
             'url_bet': url_bet,
         })
-
-    count = 0
-
-    f = open(os.path.join(script_dir, 'config/city.txt'), 'r', encoding='utf-8')
-    city = f.read().split(', ')
-    f.close()
-
-    f = open(os.path.join(script_dir, 'logs/GOOD_bet.txt'), 'w', encoding='utf-8')
-    f.write('Взятые заявки на \n<b>' + datetime.today().strftime('%d.%m.%Y %H:%M:%S.%f')[:-3] + '</b>\n\n')
-    f.close()
-    
-    for j in range(len(city)):
-        cityRe = r"%s\b" % city[j]
-        for i in range(len(betTask)):
-            if (re.findall(cityRe, str(betTask[i].get('cityOut'))) == [city[j]]) or (re.findall(cityRe, str(betTask[i].get('cityIn'))) == [city[j]]):
-                if count < config.sumBet:
-                    urlBet = str(betTask[i].get('urlBet10'))
-
-                    session.get(urlBet, verify=True, headers={'User-Agent': UserAgent(verify_ssl=False).chrome})
-
-                    msg = '✅ <b>' + betTask[i].get('num') + '</b>\n⏺ ' + betTask[i].get('cityOut') + '\n➡️ ' + betTask[i].get('cityIn') + '\n\n'
-
-                    f = open(os.path.join(script_dir, 'logs/GOOD_bet.txt'), 'a', encoding='utf-8')
-                    f.write(msg)
-                    f.close()
-
-                    count += 1
-
-    f = open(os.path.join(script_dir, 'logs/log_bet.txt'), 'w', encoding='utf-8')
-    for i in range(len(betTask)):
-        for key, value in betTask[i].items():
-            f.write("{0}: {1}".format(key, value) + "\n")
-        f.write("\n")
-    f.close()
+    return bet_tasks
 
 
-# def act(x):
-#     return x+10
-#
-#
-# def wait_start(runTime, action):
-#     startTime = time(*(map(int, runTime.split(':'))))
-#     while startTime > datetime.today().time():
-#         time.sleep(1)
-#     return action
+def get_cities() -> str:
+    """
+    Поллучение городов из БД в виде
+    подготовленной строки.
+    """
+    # должна получать список городов
+    return '|'.join(db.get('city'))
+
+
+def select_tasks(bet_tasks, session) -> None:
+    """
+    Выбор и сохранение подходящих заявок в БД.
+    Отправка запроса на сайт торгов.
+    """
+    if db.get('accepted_tasks'):
+        db.delete_one('accepted_tasks')
+    cities: str = get_cities()
+    for i in range(len(bet_tasks)):
+        if re.findall(cities, str(bet_tasks[i].get('departure_city'))) \
+                or re.findall(cities, str(bet_tasks[i].get('arrival_city'))):
+            if count := 0 < db.get('number_tasks'):
+                session.get(
+                    str(bet_tasks[i].get('url_bet')),
+                    verify=True,
+                    headers={'User-Agent': USER_AGENT})
+                db.rpush('accepted_tasks', json.dumps(bet_tasks[i]))
+                count += 1
+
+
+def act(x):
+    return x + 10
+
+
+def wait_start(run_time, action):
+    start_time = dtime(*(map(int, run_time.split(':'))))
+    while start_time > datetime.today().time():
+        time.sleep(1)
+    return action
 
 
 def main():
     session = requests.Session()
 
-    # wait_start('15:00:00', lambda: act(100))
+    wait_start('15:00:00', lambda: act(100))
 
-    # login(session)
+    login(session)
     soup = get_trade_page(session)
     while not soup.find('table'):
         soup = get_trade_page(session)
-    parse_table(soup)
-    # logout(session)
+    bet_tasks = parse_table(soup)
+    select_tasks(bet_tasks, session)
+    logout(session)
 
 
 if __name__ == '__main__':

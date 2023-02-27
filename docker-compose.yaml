@@ -1,0 +1,22 @@
+version: '3.8'
+services:
+  redis:
+    container_name: 'redis'
+    image: redis:7-alpine
+    environment:
+      - REDIS_PORT=${REDIS_PORT:-6379}
+    networks:
+      - mynetwork
+    expose:
+      - '${REDIS_PORT}'
+    ports:
+      - '${REDIS_PORT}:${REDIS_PORT}'
+    healthcheck:
+      test: [ 'CMD', 'redis-cli', 'ping' ]
+      interval: 5s
+      timeout: 20s
+      retries: 100
+networks:
+  mynetwork:
+    name: mynetwork
+    driver: bridge
