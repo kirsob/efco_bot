@@ -20,6 +20,11 @@ class Redis:
         data = json.dumps(value)
         redis_client.rpush(name=key, value=data)
 
+    def replace(self, key: str, value: Any) -> None:
+        self.delete_one(keys=key)
+        data = json.dumps(value)
+        redis_client.set(name=key, value=data)
+
     def delete_one(self, keys: List[str] | str) -> None:
         redis_client.delete(*keys)
 

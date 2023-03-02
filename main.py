@@ -1,10 +1,8 @@
-import json
 import logging
 import re
 import time
 from datetime import datetime
 from datetime import time as dtime
-from sys import stdout
 from typing import Dict, List
 
 import requests
@@ -14,11 +12,7 @@ from config.config import (EFCO_LOGIN, EFCO_PASSWORD, URL_BASE, URL_LOGIN,
                            URL_LOGOUT, URL_TRADE, USER_AGENT)
 from db.redis_operations import db
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    handlers=[logging.StreamHandler(stream=stdout)],
-)
+logger = logging.getLogger(__name__)
 
 
 def login(session: requests.Session) -> None:
@@ -89,17 +83,17 @@ def parse_table(soup: BeautifulSoup) -> List[Dict[str, str]]:
 
 def get_cities() -> str:
     """
-    Поллучение городов из БД в виде
-    подготовленной строки.
+    Получает список городов из БД
+    и возвращает подготовленную строку для RegEx операций.
     """
-    # должна получать список городов
-    return '|'.join(db.get('city'))
+    return '|'.join(db.get('cities'))
 
 
 def select_tasks(bet_tasks, session) -> None:
     """
     Выбор и сохранение подходящих заявок в БД.
-    Отправка запроса на сайт торгов.
+    Предыдущие сохраненные заявки удаляются из БД.
+    Запрос с выбраной заявкой на сайт торгов.
     """
     if db.get('accepted_tasks'):
         db.delete_one('accepted_tasks')
@@ -107,12 +101,12 @@ def select_tasks(bet_tasks, session) -> None:
     for i in range(len(bet_tasks)):
         if re.findall(cities, str(bet_tasks[i].get('departure_city'))) \
                 or re.findall(cities, str(bet_tasks[i].get('arrival_city'))):
-            if count := 0 < db.get('number_tasks'):
+            if count := 0 < db.get('quantity_tasks'):
                 session.get(
                     str(bet_tasks[i].get('url_bet')),
                     verify=True,
                     headers={'User-Agent': USER_AGENT})
-                db.rpush('accepted_tasks', json.dumps(bet_tasks[i]))
+                db.rpush('accepted_tasks', bet_tasks[i])
                 count += 1
 
 
