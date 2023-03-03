@@ -61,25 +61,29 @@ def select_quantity_tasks(update: Update, context: CallbackContext) -> None:
     query.edit_message_text(text=f'Окей, возьму: {button_value}')
 
 
-def get_cities(update: Update, context: CallbackContext) -> int:
-    current_cities = db.get('cities')
-    massage = 'Сейчас список городов такой:'
-    for city in current_cities:
-        massage += f'\n- {city}'
-    update.message.reply_text(text=massage)
+def get_cities() -> str:
+    message = ''
+    cities = db.get('cities')
+    for city in cities:
+        message += f'\n- {city}'
+    return message
+
+
+def request_change_cities(update: Update, context: CallbackContext) -> int:
+    message = 'Сейчас список городов такой:' + get_cities()
+    update.message.reply_text(text=message)
     update.message.reply_text(
         text='Чтобы изменить список, '
-             'пришлите новый список городов через запятую!',
-    )
+             'пришлите новый список городов через запятую!')
+    # TODO: тут нужно передавать кнопку Назад
     return SET_CITIES
 
 
 def set_cities(update: Update, context: CallbackContext) -> int:
     cities = update.message.text.split(', ')
     db.replace('cities', cities)
-    update.message.reply_text(
-        text='Ок, новый список городов сохранен!'
-    )
+    message = 'Ок, новый список городов сохранен:' + get_cities()
+    update.message.reply_text(text=message)
     return START
 
 
@@ -92,11 +96,13 @@ def main() -> None:
     updater.dispatcher.add_handler(CallbackQueryHandler(select_quantity_tasks))
 
     cities_handler = ConversationHandler(
-        entry_points=[MessageHandler(Filters.text('Города'), get_cities)],
+        entry_points=[MessageHandler(
+            Filters.text('Города'), request_change_cities)],
         states={
             SET_CITIES: [MessageHandler(Filters.text, set_cities)]
         },
-        fallbacks=[MessageHandler(Filters.text('Города'), get_cities)]
+        fallbacks=[MessageHandler(
+            Filters.text('Города'), request_change_cities)]
     )
     updater.dispatcher.add_handler(cities_handler)
 

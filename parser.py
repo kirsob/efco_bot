@@ -60,9 +60,9 @@ def parse_table(soup: BeautifulSoup) -> List[Dict[str, str]]:
     for rows in soup.find_all('tr')[1:]:
         cols = rows.find_all('td')
         # в атрибут text передаем стоимость ставки в str
-        link: dict = rows.find(
+        link: Dict = rows.find(
             'button',
-            text=re.compile('9.9'),
+            string=re.compile('9.9'),
             class_='newbet')
 
         if not link:
@@ -115,6 +115,7 @@ def act(x):
 
 
 def wait_start(run_time, action):
+    """Функция для 'точного' старта парсера."""
     start_time = dtime(*(map(int, run_time.split(':'))))
     while start_time > datetime.today().time():
         time.sleep(1)
