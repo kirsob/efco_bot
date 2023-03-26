@@ -1,4 +1,5 @@
 import logging
+import sys
 
 from telegram import (InlineKeyboardButton, InlineKeyboardMarkup,
                       ReplyKeyboardMarkup, Update)
@@ -8,11 +9,6 @@ from telegram.ext import (CallbackContext, CallbackQueryHandler,
 
 from config.config import TELEGRAM_TOKEN
 from db.redis_operations import db
-
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 START, SET_CITIES = range(2)
 
@@ -111,4 +107,14 @@ def main() -> None:
 
 
 if __name__ == '__main__':
+    logging.basicConfig(
+        level=logging.INFO,
+        handlers=[
+            logging.FileHandler(
+                filename='logs/bot.log', mode='w', encoding='UTF-8'),
+            logging.StreamHandler(stream=sys.stdout)
+        ],
+        format='%(asctime)s, %(levelname)s, %(funcName)s, '
+               '%(lineno)s, %(message)s',
+    )
     main()
